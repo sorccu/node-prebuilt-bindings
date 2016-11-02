@@ -1,0 +1,17 @@
+{
+  "name": "prebuilt-bindings",
+  "version": "1.0.0",
+  "description": "Add prebuilt bindings to your native module.",
+  "keywords": [
+    "bindings",
+    "gyp",
+    "node-gyp",
+    "prebuilt"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sorccu/node-prebuilt-bindings.git"
+  },
+  "main": "./index"
+}
