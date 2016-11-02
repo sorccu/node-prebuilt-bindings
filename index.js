@@ -66,7 +66,7 @@ const main = module.exports = (config) => {
   })
   .catch(err => {
     usage()
-    console.error(`${err}`, err)
+    console.error(`${err}`)
     process.exit(1)
   })
 }
