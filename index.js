@@ -97,16 +97,20 @@ const clean = module.exports.clean = (config) => {
 
 const install = module.exports.install = (config) => {
   return Promise.all(config.bindings.map(binding => {
-    return test(binding.local).catch(() => {
-      return createWriter(binding.local)
-        .then(writer => {
-          // @TODO Really support more than one location.
-          return download(binding.remote.shift(), writer)
-        })
-        .then(() => test(binding.local).catch(err => {
-          log(`Prebuilt binding is incompatible`)
-          throw err
-        }))
+    const local = binding.local
+    return test(local).catch(() => {
+      const remotes = [].concat(binding.remote)
+      const next = () => {
+        const remote = remotes.shift()
+        if (!remote) {
+          return Promise.reject(new Error('No compatible bindings found'))
+        }
+        return createWriter(local)
+          .then(writer => download(remote, writer))
+          .then(() => test(local))
+          .catch(next)
+      }
+      return next()
     })
   }))
   .then(() => log('Prebuilt bindings installed!'))
@@ -170,7 +174,7 @@ const download = module.exports.download = (src, writer) => {
     }
   })
 
-  return request(options, (req, res) => {
+  return request(options, (req, res) => new Promise((resolve, reject) => {
     const statusCode = res.statusCode
 
     switch (statusCode) {
@@ -184,7 +188,7 @@ const download = module.exports.download = (src, writer) => {
         const location = res.headers['location']
         res.resume()
         log(`Following ${statusCode} redirect to ${location}`)
-        return download(location, writer)
+        return resolve(download(location, writer))
       }
       default: {
         req.abort()
@@ -195,7 +199,7 @@ const download = module.exports.download = (src, writer) => {
 
     const contentType = res.headers['content-type']
 
-    return new Promise((resolve, reject) => {
+    return resolve(new Promise((resolve, reject) => {
       const decode = (stream) => {
         const contentEncoding = res.headers['content-encoding']
         switch (contentEncoding) {
@@ -225,8 +229,8 @@ const download = module.exports.download = (src, writer) => {
         .pipe(writer)
         .on('error', reject)
         .on('finish', resolve)
-    })
-  })
+    }))
+  }))
 }
 
 // Build all bindings. By this time it's clear that we can't find or access
