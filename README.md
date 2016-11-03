@@ -13,6 +13,8 @@
     - Easily implement features such as only building on specific platforms.
 * Allows you to run `node-gyp` directly if you wish.
 * Supports multiple bindings per module.
+* Super easy [nvm](https://github.com/creationix/nvm) integration.
+    - Global installation not required!
 * Minimal bloat-free implementation.
 * Dependency free!
 
