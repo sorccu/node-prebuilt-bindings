@@ -9,7 +9,7 @@ const zlib = require('zlib')
 // Print out CLI usage.
 const usage = () => {
   console.error(
-`Usage: prebuilt-bindings [<command>...]
+`Usage: prebuilt-bindings [command...]
 
 Commands:
   build     Builds bindings locally.
