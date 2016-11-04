@@ -25,7 +25,7 @@ Commands:
 }
 
 // The main CLI.
-const main = module.exports = (config) => {
+module.exports = (config) => {
   return expandConfig(config).then(config => {
     const args = process.argv.slice(2)
 
@@ -196,8 +196,6 @@ const download = module.exports.download = (src, writer) => {
         throw new Error(`Request to '${src}' returned HTTP ${statusCode}`)
       }
     }
-
-    const contentType = res.headers['content-type']
 
     return resolve(new Promise((resolve, reject) => {
       const decode = (stream) => {
@@ -393,7 +391,6 @@ const expandConfig = module.exports.expandConfig = (options) => {
 
     const context = options.context || path.resolve(__dirname, '../..')
     const pkg = require(path.resolve(context, 'package'))
-    const repoUrl = repositoryUrlFromPackage(pkg)
 
     const bindings = options.bindings.map(binding => {
       const name = binding.name

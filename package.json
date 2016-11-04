@@ -13,5 +13,11 @@
     "type": "git",
     "url": "https://github.com/sorccu/node-prebuilt-bindings.git"
   },
-  "main": "./index"
+  "main": "./index",
+  "devDependencies": {
+    "eslint": "^3.9.1",
+    "eslint-config-standard": "^6.2.1",
+    "eslint-plugin-promise": "^3.3.0",
+    "eslint-plugin-standard": "^2.0.1"
+  }
 }
