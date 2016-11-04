@@ -265,10 +265,6 @@ const download = module.exports.download = (src, writer) => {
           return stream.pipe(zlib.createGunzip()).on('error', reject)
         }
 
-        if (options.pathname.endsWith('.zip')) {
-          return stream.pipe(zlib.createUnzip()).on('error', reject)
-        }
-
         return stream
       }
 
