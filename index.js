@@ -286,7 +286,7 @@ const test = module.exports.test = (file) => {
       require(file)
       return resolve()
     } catch (err) {
-      log('Binding not found or incompatible.')
+      log('Binding not found or incompatible')
       throw err
     } finally {
       delete require.cache[file]
