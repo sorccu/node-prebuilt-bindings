@@ -238,20 +238,16 @@ const download = module.exports.download = (src, writer) => {
 const build = module.exports.build = () => {
   log('Building from source...')
   return new Promise((resolve, reject) => {
-    const guessGyp = () => {
-      if (process.env.npm_config_node_gyp) {
-        return process.env.npm_config_node_gyp
-      }
-
-      return ({ 'win32': 'node-gyp.cmd' })[process.platform] || 'node-gyp'
+    const opts = {
+      stdio: 'inherit'
     }
 
     // NPM makes sure that node-gyp is in PATH. Rely on that happening,
-    // adding cross-platform path guessing code would easily add 50 mostly
-    // useless lines.
-    const gyp = spawn(guessGyp(), ['rebuild'], {
-      stdio: 'inherit',
-    })
+    // adding cross-platform path guessing code added nearly 100 lines. It
+    // was tried.
+    const gyp = /^win/.test(process.platform)
+      ? spawn('cmd.exe', ['/c', 'node-gyp', 'rebuild'], opts)
+      : spawn('node-gyp', ['rebuild'], opts)
 
     gyp.on('error', reject)
     gyp.on('exit', (code, signal) => {
