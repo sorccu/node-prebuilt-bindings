@@ -64,7 +64,14 @@ Now, modify your `package.json` as follows to include an installation script:
 
 This replaces the built-in npm `install` script, which is just `node-gyp rebuild` by default.
 
-Finally, add `*.node.gz` to your `.gitignore` and `.npmignore`.
+Finally, you should have the following entries in your `.gitignore` and `.npmignore`:
+
+```
+/*.node.gz
+/build/
+```
+
+The first one makes sure that you won't accidentally commit or embed the prebuilt bindings, and the second one does the same for the build folder.
 
 ## Usage
 
