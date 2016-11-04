@@ -25,24 +25,26 @@ Commands:
 }
 
 // The main CLI.
-module.exports = (config) => {
-  return expandConfig(config).then(config => {
+module.exports = (options) => {
+  return new Promise((resolve, reject) => {
     const args = process.argv.slice(2)
 
     // Don't run yet, map to a runner instead. This allows us to bail on
     // unsupported options prior to anything actually running.
-    const cmds = !args.length ? [() => install(config)] : args.map(cmd => {
+    const cmds = !args.length ? [() => install(options)] : args.map(cmd => {
       switch (cmd) {
         case 'build':
-          return () => build()
+          return () => build(options)
         case 'clean':
-          return () => clean(config)
+          return () => clean(options)
         case 'config':
-          return () => console.log(JSON.stringify(config, null, 2))
+          return () => expandConfig(options).then(config => {
+            console.log(JSON.stringify(config, null, 2))
+          })
         case 'install':
-          return () => install(config)
+          return () => install(options)
         case 'pack':
-          return () => pack(config)
+          return () => pack(options)
         case '-h':
         case '--help':
         case 'help':
@@ -62,7 +64,7 @@ module.exports = (config) => {
     }
 
     // Ok, run now.
-    return next()
+    return resolve(next())
   })
   .catch(err => {
     usage()
@@ -75,44 +77,85 @@ const log = module.exports.log = (message) => {
   console.error(`[prebuilt-bindings] => ${message}`)
 }
 
-const clean = module.exports.clean = (config) => {
-  return Promise.all(config.bindings.map(binding => {
-    return new Promise((resolve, reject) => {
-      fs.unlink(binding.local, err => {
-        if (err) {
-          reject(err)
-        } else {
-          resolve()
-        }
-      })
-    })
-    .then(() => log(`Cleaned up ${binding.local}`))
-    .catch(err => {
-      if (err.code !== 'ENOENT') {
-        throw err
+// Builds all bindings locally.
+const build = module.exports.build = () => {
+  log('Building from source...')
+  return new Promise((resolve, reject) => {
+    const opts = {
+      stdio: 'inherit'
+    }
+
+    // NPM makes sure that node-gyp is in PATH. Rely on that happening,
+    // adding cross-platform path guessing code added nearly 100 lines. It
+    // was tried.
+    const gyp = /^win/.test(process.platform)
+      ? spawn('cmd.exe', ['/c', 'node-gyp', 'rebuild'], opts)
+      : spawn('node-gyp', ['rebuild'], opts)
+
+    gyp.on('error', reject)
+    gyp.on('exit', (code, signal) => {
+      if (signal) {
+        return reject(new Error(`node-gyp was killed with signal ${signal}`))
       }
+
+      if (code !== 0) {
+        return reject(new Error(`node-gyp failed with status ${code}`))
+      }
+
+      resolve()
     })
-  }))
+  })
 }
 
-const install = module.exports.install = (config) => {
-  return Promise.all(config.bindings.map(binding => {
-    const local = binding.local
-    return test(local).catch(() => {
-      const remotes = [].concat(binding.remote)
-      const next = () => {
-        const remote = remotes.shift()
-        if (!remote) {
-          return Promise.reject(new Error('No compatible bindings found'))
+// Cleans up currently installed bindings.
+const clean = module.exports.clean = (options) => {
+  return expandConfig(options).then(config => {
+    return Promise.all(config.bindings.map(binding => {
+      log(`Removing '${binding.local}'...`)
+      return new Promise((resolve, reject) => {
+        fs.unlink(binding.local, err => {
+          if (err) {
+            reject(err)
+          } else {
+            resolve()
+          }
+        })
+      })
+      .catch(err => {
+        if (err.code !== 'ENOENT') {
+          throw err
         }
-        return createWriter(local)
-          .then(writer => download(remote, writer))
-          .then(() => test(local))
-          .catch(next)
-      }
-      return next()
-    })
-  }))
+      })
+    }))
+  })
+  .then(() => log(`Cleanup finished!`))
+  .catch(err => {
+    log(`Unable to clean up bindings: ${err}`)
+    return build()
+  })
+}
+
+// Installs prebuilt bindings or falls back to building them.
+const install = module.exports.install = (options) => {
+  return expandConfig(options).then(config => {
+    return Promise.all(config.bindings.map(binding => {
+      const local = binding.local
+      return test(local).catch(() => {
+        const remotes = [].concat(binding.remote)
+        const next = () => {
+          const remote = remotes.shift()
+          if (!remote) {
+            return Promise.reject(new Error('No compatible bindings found'))
+          }
+          return createWriter(local)
+            .then(writer => download(remote, writer))
+            .then(() => test(local))
+            .catch(next)
+        }
+        return next()
+      })
+    }))
+  })
   .then(() => log('Prebuilt bindings installed!'))
   .catch(err => {
     log(`Unable to install prebuilt bindings: ${err}`)
@@ -120,35 +163,41 @@ const install = module.exports.install = (config) => {
   })
 }
 
-const pack = module.exports.pack = (config) => {
-  return Promise.all(config.bindings.map(binding => {
-    const packfile = `${defaultBindingFilename(binding.name)}.gz`
-    const packer = zlib.createGzip({
-      level: 9
-    })
+// Packs built bindings for deployment while checking for compatibility.
+const pack = module.exports.pack = (options) => {
+  return expandConfig(options).then(config => {
+    return Promise.all(config.bindings.map(binding => {
+      const packfile = `${defaultBindingFilename(binding.name)}.gz`
+      const packer = zlib.createGzip({
+        level: 9
+      })
 
-    return test(binding.local)
-      .then(() => {
-        return new Promise((resolve, reject) => {
-          // Verify that the file can be read before setting up the writer.
-          const reader = fs.createReadStream(binding.local)
-          reader.on('open', () => resolve(reader))
-          reader.on('error', reject)
+      return test(binding.local)
+        .then(() => {
+          return new Promise((resolve, reject) => {
+            // Verify that the file can be read before setting up the writer.
+            const reader = fs.createReadStream(binding.local)
+            reader.on('open', () => resolve(reader))
+            reader.on('error', reject)
+          })
         })
-      })
-      .then(reader => {
-        return new Promise((resolve, reject) => {
-          const writer = fs.createWriteStream(packfile)
-          reader.on('error', reject)
-            .pipe(packer)
-            .on('error', reject)
-            .pipe(writer)
-            .on('error', reject)
-            .on('finish', resolve)
+        .then(reader => {
+          return new Promise((resolve, reject) => {
+            const writer = fs.createWriteStream(packfile)
+            reader.on('error', reject)
+              .pipe(packer)
+              .on('error', reject)
+              .pipe(writer)
+              .on('error', reject)
+              .on('finish', resolve)
+          })
         })
-      })
-      .then(() => console.log(`${packfile}`))
-  }))
+        .then(() => console.log(`${packfile}`))
+    }))
+  })
+  .catch(err => {
+    log(`Unable to pack prebuilt bindings: ${err}`)
+  })
 }
 
 // Request the given URL without making any decisions about the response.
@@ -163,8 +212,9 @@ const request = module.exports.request = (options, handler) => {
   })
 }
 
-// Download the given URL and pipe a qualifying response to the writer.
-// Redirects are followed. To keep things simple, assume no redirect loops.
+// Downloads the given URL and pipes a qualifying response to the writer.
+// Redirects are followed. To keep things simple, assumes that redirect
+// loops don't happen.
 const download = module.exports.download = (src, writer) => {
   log(`Downloading '${src}'...`)
 
@@ -231,38 +281,7 @@ const download = module.exports.download = (src, writer) => {
   }))
 }
 
-// Build all bindings. By this time it's clear that we can't find or access
-// at least one prebuilt binding, causing a full rebuild.
-const build = module.exports.build = () => {
-  log('Building from source...')
-  return new Promise((resolve, reject) => {
-    const opts = {
-      stdio: 'inherit'
-    }
-
-    // NPM makes sure that node-gyp is in PATH. Rely on that happening,
-    // adding cross-platform path guessing code added nearly 100 lines. It
-    // was tried.
-    const gyp = /^win/.test(process.platform)
-      ? spawn('cmd.exe', ['/c', 'node-gyp', 'rebuild'], opts)
-      : spawn('node-gyp', ['rebuild'], opts)
-
-    gyp.on('error', reject)
-    gyp.on('exit', (code, signal) => {
-      if (signal) {
-        return reject(new Error(`node-gyp was killed with signal ${signal}`))
-      }
-
-      if (code !== 0) {
-        return reject(new Error(`node-gyp failed with status ${code}`))
-      }
-
-      resolve()
-    })
-  })
-}
-
-// Test whether the given file functions as a node module.
+// Tests whether the given file functions as a node module.
 const test = module.exports.test = (file) => {
   log(`Testing '${file}'...`)
   return new Promise((resolve, reject) => {
@@ -278,6 +297,8 @@ const test = module.exports.test = (file) => {
   })
 }
 
+// Attempts to figure out the repository URL from the given package
+// configuration.
 const repositoryUrlFromPackage = module.exports.repositoryUrlFromPackage = (pkg) => {
   if (!('repository' in pkg)) {
     throw new Error('Repository not set in package.json')
@@ -310,6 +331,7 @@ const repositoryUrlFromPackage = module.exports.repositoryUrlFromPackage = (pkg)
   }
 }
 
+// Returns the default deployed binding name for the given name.
 const defaultBindingFilename = module.exports.defaultBindingFilename = (name) => {
   return `${[
     name,
@@ -319,6 +341,8 @@ const defaultBindingFilename = module.exports.defaultBindingFilename = (name) =>
   ].join('-')}.node`
 }
 
+// Returns a list of likely binding URLs for the given name based on the
+// package configuration.
 const defaultBindingUrlsFromPackage = module.exports.defaultBindingUrlsFromPackage = (name, pkg) => {
   if (!('repository' in pkg)) {
     throw new Error('Repository not set in package.json')
@@ -344,6 +368,7 @@ const defaultBindingUrlsFromPackage = module.exports.defaultBindingUrlsFromPacka
   ]
 }
 
+// Creates any missing directories up to and including the given directory.
 const mkdirp = module.exports.mkdirp = (dir) => {
   const mkdir = (dir) => new Promise((resolve, reject) => {
     log(`mkdir ${dir}`)
@@ -368,6 +393,7 @@ const mkdirp = module.exports.mkdirp = (dir) => {
   })
 }
 
+// Creates a writer for the given file, creating any missing directories.
 const createWriter = module.exports.createWriter = (file) => {
   return new Promise((resolve, reject) => {
     const writer = fs.createWriteStream(file)
@@ -383,6 +409,7 @@ const createWriter = module.exports.createWriter = (file) => {
   })
 }
 
+// Expands user-provided options into a usable configuration.
 const expandConfig = module.exports.expandConfig = (options) => {
   return new Promise((resolve, reject) => {
     if (!options || !options.context) {
@@ -402,16 +429,16 @@ const expandConfig = module.exports.expandConfig = (options) => {
         binding.local || `build/Release/${name}.node`
       )
 
-      return {
+      return Object.assign({}, binding, {
         name,
         remote,
         local
-      }
+      })
     })
 
-    resolve({
+    resolve(Object.assign({}, options, {
       context,
       bindings
-    })
+    }))
   })
 }
