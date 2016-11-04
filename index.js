@@ -237,13 +237,14 @@ const download = module.exports.download = (src, writer) => {
       case 308: {
         const location = res.headers['location']
         res.resume()
-        log(`Following ${statusCode} redirect to ${location}`)
+        log(`Following ${statusCode} redirect to '${location}'`)
         return resolve(download(location, writer))
       }
       default: {
         req.abort()
-        log(`Server responded with ${statusCode}`)
-        throw new Error(`Request to '${src}' returned HTTP ${statusCode}`)
+        const statusMessage = res.statusMessage
+        log(`Server responded with '${statusCode} ${statusMessage}'`)
+        throw new Error(`HTTP ${statusCode}`)
       }
     }
 
