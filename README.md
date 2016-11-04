@@ -90,7 +90,7 @@ Now that we've got that out of the way, let's get to packing.
 npm run prebuilt-bindings -- clean build pack
 ```
 
-This should create a properly named archive for you to attach to the corresponding GitHub release. Simply upload the files and any new installs your module will fetch them.
+This should create a properly named archive for you to attach to the corresponding GitHub release. Simply upload the files and any new installs of your module will fetch them.
 
 ### Recommended release flow
 
