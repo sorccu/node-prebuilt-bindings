@@ -49,9 +49,8 @@ module.exports = (options) => {
         case '--help':
         case 'help':
           return () => usage()
-        default: {
+        default:
           throw new Error(`Unknown command '${cmd}'`)
-        }
       }
     })
 
