@@ -6,6 +6,8 @@
 
 ## Benefits/philosophy
 
+### Pros
+
 * Leave legacy cruft behind. Only support most recent Node in [*active* Long-term Support](https://github.com/nodejs/LTS#lts-schedule) (currently v4) and newer.
     - Take advantage of [ES2015 and later features](http://node.green/) (but don't require `--harmony` flag).
 * Configuration is code with sensible defaults.
@@ -19,6 +21,18 @@
     - Global installation not required!
 * Minimal bloat-free implementation.
 * Dependency free!
+
+### Cons
+
+The current limitations are as follows.
+
+* Not compatible with old Node.js versions.
+    - Your module won't be either.
+* Does not yet support `http_proxy` and friends.
+* Does not support overriding hosted binary location at install time.
+* Does not support multiple files (e.g. generated artifacts) per binding.
+
+If any of these is a deal-breaker, you might want to consider [node-pre-gyp](https://github.com/mapbox/node-pre-gyp) instead.
 
 ## Installation
 
