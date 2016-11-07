@@ -9,7 +9,7 @@ const zlib = require('zlib')
 // Print out CLI usage.
 const usage = () => {
   console.error(
-`Usage: prebuilt-bindings [command...]
+`Usage: prebuilt-bindings [command...] [options]
 
 Commands:
   build     Builds bindings locally.
@@ -20,6 +20,11 @@ Commands:
             Default command if none is given.
   pack      Packs configured bindings into properly named individual archives
             for easy deployment.
+
+Options:
+  --no-download   Don't download prebuilt bindings. (PREBUILT_BINDINGS=0)
+  --no-build      Don't build if prebuilt bindings can't be found.
+  -h, --help      Show usage.
 `
   )
 }
@@ -45,6 +50,16 @@ module.exports = (options) => {
           return () => install(options)
         case 'pack':
           return () => pack(options)
+        case '--no-download':
+          options = Object.assign({}, options, {
+            download: false
+          })
+          break
+        case '--no-build':
+          options = Object.assign({}, options, {
+            build: false
+          })
+          break
         case '-h':
         case '--help':
         case 'help':
@@ -77,32 +92,40 @@ const log = module.exports.log = (message) => {
 }
 
 // Builds all bindings locally.
-const build = module.exports.build = () => {
-  log('Building from source...')
-  return new Promise((resolve, reject) => {
-    const opts = {
-      stdio: 'inherit'
+const build = module.exports.build = (options) => {
+  return expandConfig(options).then(config => {
+    if (!config.build) {
+      log(`Skipping build phase as requested`)
+      return Promise.resolve()
     }
 
-    // NPM makes sure that node-gyp is in PATH. Rely on that happening,
-    // adding cross-platform path guessing code added nearly 100 lines. It
-    // was tried.
-    const gyp = /^win/.test(process.platform)
-      ? spawn('cmd.exe', ['/c', 'node-gyp', 'rebuild'], opts)
-      : spawn('node-gyp', ['rebuild'], opts)
-
-    gyp.on('error', reject)
-    gyp.on('exit', (code, signal) => {
-      if (signal) {
-        return reject(new Error(`node-gyp was killed with signal ${signal}`))
+    log('Building from source...')
+    return new Promise((resolve, reject) => {
+      const opts = {
+        stdio: 'inherit'
       }
 
-      if (code !== 0) {
-        return reject(new Error(`node-gyp failed with status ${code}`))
-      }
+      // NPM makes sure that node-gyp is in PATH. Rely on that happening,
+      // adding cross-platform path guessing code added nearly 100 lines. It
+      // was tried.
+      const gyp = /^win/.test(process.platform)
+        ? spawn('cmd.exe', ['/c', 'node-gyp', 'rebuild'], opts)
+        : spawn('node-gyp', ['rebuild'], opts)
 
-      resolve()
+      gyp.on('error', reject)
+      gyp.on('exit', (code, signal) => {
+        if (signal) {
+          return reject(new Error(`node-gyp was killed with signal ${signal}`))
+        }
+
+        if (code !== 0) {
+          return reject(new Error(`node-gyp failed with status ${code}`))
+        }
+
+        resolve()
+      })
     })
+    .then(() => log('Build finished!'))
   })
 }
 
@@ -128,15 +151,21 @@ const clean = module.exports.clean = (options) => {
     }))
   })
   .then(() => log(`Cleanup finished!`))
-  .catch(err => {
-    log(`Unable to clean up bindings: ${err}`)
-    return build()
-  })
 }
 
 // Installs prebuilt bindings or falls back to building them.
 const install = module.exports.install = (options) => {
   return expandConfig(options).then(config => {
+    if (!config.download) {
+      log(`Skipping download phase as requested`)
+      return Promise.all(config.bindings.map(binding => {
+        const local = binding.local
+        return test(local)
+      }))
+      .then(() => log('All good!'))
+      .catch(() => build(config))
+    }
+
     return Promise.all(config.bindings.map(binding => {
       const local = binding.local
       return test(local).catch(() => {
@@ -154,11 +183,11 @@ const install = module.exports.install = (options) => {
         return next()
       })
     }))
-  })
-  .then(() => log('Prebuilt bindings installed!'))
-  .catch(err => {
-    log(`Unable to install prebuilt bindings: ${err}`)
-    return build()
+    .then(() => log('Prebuilt bindings installed!'))
+    .catch(err => {
+      log(`Unable to download prebuilt bindings: ${err.message}`)
+      return build(options)
+    })
   })
 }
 
@@ -193,9 +222,6 @@ const pack = module.exports.pack = (options) => {
         })
         .then(() => console.log(`${packfile}`))
     }))
-  })
-  .catch(err => {
-    log(`Unable to pack prebuilt bindings: ${err}`)
   })
 }
 
@@ -417,6 +443,10 @@ const expandConfig = module.exports.expandConfig = (options) => {
       throw new Error(`Missing 'context' option`)
     }
 
+    if (options.expanded) {
+      return resolve(options)
+    }
+
     const context = options.context || path.resolve(__dirname, '../..')
     const pkg = require(path.resolve(context, 'package'))
 
@@ -437,9 +467,37 @@ const expandConfig = module.exports.expandConfig = (options) => {
       })
     })
 
-    resolve(Object.assign({}, options, {
+    const defaults = {
+      download: true,
+      build: true
+    }
+
+    const config = Object.assign({}, defaults, options, {
+      expanded: true,
       context,
       bindings
-    }))
+    })
+
+    if (process.env.PREBUILT_BINDINGS === '0') {
+      config.download = false
+    }
+
+    try {
+      const nargv = process.env.npm_config_argv
+      if (nargv) {
+        const cooked = JSON.parse(nargv).cooked
+        if (cooked.indexOf('--no-prebuilt') !== -1) {
+          config.download = false
+        }
+        // For node-pre-gyp compatibility.
+        if (cooked.indexOf('--build-from-source') !== -1) {
+          config.download = false
+        }
+      }
+    } catch (err) {
+      log(`Ignoring issue in npm arg parsing: ${err}`)
+    }
+
+    return resolve(config)
   })
 }
