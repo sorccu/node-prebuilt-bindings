@@ -322,6 +322,12 @@ const repositoryUrlFromPackage = module.exports.repositoryUrlFromPackage = (pkg)
     case 'http:':
     case 'https:':
       return urlObject
+    case 'git+http:':
+      urlObject.protocol = 'http:'
+      return urlObject
+    case 'git+https:':
+      urlObject.protocol = 'https:'
+      return urlObject
     default:
       throw new Error(`Unsupported repository URL '${urlObject.href}'`)
   }
