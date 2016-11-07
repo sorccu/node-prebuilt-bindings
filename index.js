@@ -373,7 +373,6 @@ const defaultBindingUrlsFromPackage = module.exports.defaultBindingUrlsFromPacka
 // Creates any missing directories up to and including the given directory.
 const mkdirp = module.exports.mkdirp = (dir) => {
   const mkdir = (dir) => new Promise((resolve, reject) => {
-    log(`mkdir ${dir}`)
     fs.mkdir(dir, err => {
       if (err) {
         reject(err)
