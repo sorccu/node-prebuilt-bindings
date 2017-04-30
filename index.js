@@ -357,7 +357,7 @@ const defaultBindingUrlsFromPackage = module.exports.defaultBindingUrlsFromPacka
   downloadUrlObject.pathname = [
     nogit(noslash(downloadUrlObject.pathname)),
     'releases',
-    'download',
+    'tag',
     `v${pkg.version}`,
     defaultBindingFilename(name)
   ].join('/')
