@@ -1,6 +1,6 @@
 {
   "name": "prebuilt-bindings",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Add prebuilt bindings to your native module.",
   "keywords": [
     "bindings",
