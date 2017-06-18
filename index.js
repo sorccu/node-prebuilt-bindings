@@ -287,6 +287,18 @@ const download = module.exports.download = (src, writer) => {
       }
 
       const unpack = (stream) => {
+        const contentDisposition = res.headers['content-disposition']
+
+        if (contentDisposition) {
+          // This obviously isn't perfect, but considering how complex the
+          // whole issue is (see [1]) it should work well enough.
+          //
+          // [1] http://greenbytes.de/tech/tc2231/#attwithfn2231utf8
+          if (/attachment;.*filename.*\.gz(\s*$|")/.test(contentDisposition)) {
+            return stream.pipe(zlib.createGunzip()).on('error', reject)
+          }
+        }
+
         if (options.pathname.endsWith('.gz')) {
           return stream.pipe(zlib.createGunzip()).on('error', reject)
         }
